@@ -1,0 +1,4 @@
+flask
+flask-cors
+gunicorn
+web: gunicorn app:app

@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>NurtureMe Chatbot</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background-color: #eef2f3;
+      font-family: Arial, sans-serif;
+    }
+    .chat-container {
+      max-width: 800px;
+      margin: 20px auto;
+    }
+    .chat-box {
+      height: 500px;
+      overflow-y: scroll;
+      background: #fff;
+      padding: 20px;
+      border-radius: 10px;
+      border: 1px solid #ccc;
+      margin-bottom: 1rem;
+    }
+
+    /* ---------- Shared Message Styles ---------- */
+    .message {
+      display: flex; /* so we can align items side-by-side */
+      margin-bottom: 15px;
+      width: 100%;
+    }
+    .message-content {
+      display: flex;
+      align-items: flex-start;
+      max-width: 75%; /* limit bubble width to 75% */
+      word-wrap: break-word; /* wrap text to next line if too long */
+    }
+    .message-bubble {
+      border-radius: 15px;
+      padding: 10px 15px;
+      line-height: 1.4;
+      white-space: pre-wrap; /* preserve line breaks from the text */
+    }
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      margin: 0 10px; /* space around avatar */
+      object-fit: cover; /* if images have different aspect ratios */
+    }
+
+
+    .feedback-container {
+      display: none;
+      margin-top: 5px;
+    }
+
+    /* Show the feedback container when hovering over the bot message */
+    .bot-message:hover .feedback-container {
+      display: block;
+    }
+
+    /* Style the slider */
+    .feedback-slider {
+      width: 100%;
+    }
+
+    /* Optionally, style the feedback button/icon */
+    .feedback-icon {
+      cursor: pointer;
+      font-size: 20px;
+      color: #ff4081;
+    }
+
+    /* Feedback section styles */
+    .feedback-section {
+      margin-top: 5px;
+      font-size: 12px;
+      color: #888;
+    }
+
+    .feedback-trigger {
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    .feedback-slider-container {
+      display: none; /* hidden by default */
+      margin-top: 5px;
+    }
+
+    .feedback-slider {
+      width: 100%;
+      accent-color: #ffb6c1; /* Pink color for slider (supported in most modern browsers) */
+    }
+
+
+    /* ---------- User (Right) ---------- */
+    .user-message {
+      justify-content: flex-end; /* push bubble to the right */
+    }
+    .user-message .message-content {
+      flex-direction: row-reverse; /* avatar after bubble visually */
+    }
+    .user-message .message-bubble {
+      background-color: #e0e0e0; /* light gray */
+      color: #000;
+    }
+
+    /* ---------- Bot (Left) ---------- */
+    .bot-message {
+      justify-content: flex-start; /* push bubble to the left */
+    }
+    .bot-message .message-bubble {
+      background-color: #ffd6e7; /* light pink */
+      color: #000;
+    }
+  </style>
+</head>
+<body>
+  <div class="chat-container">
+    <h2 class="text-center">Welcome, {{ username }}!</h2>
+
+    <!-- Chat Box -->
+    <div id="chat-box" class="chat-box"></div>
+
+    <!-- Input Form -->
+    <form id="chat-form">
+      <div class="input-group">
+        <input
+          type="text"
+          id="message"
+          class="form-control"
+          placeholder="Type your message..."
+          autocomplete="off"
+          required
+        />
+        <!-- Mic Button -->
+        <button type="button" id="mic-button" class="mx-3" style="background:none; border:none; padding:0; cursor:pointer;">
+          <img
+            id="mic-icon"
+            src="static/icons/mic_level1.png"
+            alt="Mic Icon"
+            style="width:36px; height:36px;"
+          />
+        </button>
+        <!-- Send Button -->
+        <button type="submit" class=""> <img src="static/icons/send.png" alt="Send Icon" style="width:30px; height:30px;"></button>
+      </div>
+    </form>
+  </div>
+
+  <!-- jQuery -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script>
+    let currentOffset = null;
+    let recognition;
+    let continuousMode = false;
+    let clickCount = 0;
+    let clickTimer = null;
+    const clickDelay = 300; // ms threshold for double click
+
+    // Initialize speech recognition
+    function initRecognition() {
+      recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+      recognition.lang = 'en-US';
+
+      recognition.onstart = function() { /* do nothing extra */ };
+      recognition.onresult = function(event) {
+        const transcript = event.results[0][0].transcript;
+        appendUserMessage(transcript);
+        $.post('/send', { message: transcript }, function(data) {
+          if (data.response) {
+            appendBotMessage(data.response);
+          }
+        });
+      };
+      recognition.onend = function() {
+        if (continuousMode) {
+          recognition.start();
+        } else {
+          document.getElementById('mic-icon').src = 'static/icons/mic_level1.png';
+        }
+      };
+    }
+
+    function handleSingleClick() {
+      continuousMode = false;
+      document.getElementById('mic-icon').src = 'static/icons/mic_level2.png';
+      initRecognition();
+      recognition.start();
+    }
+
+    function handleDoubleClick() {
+      continuousMode = true;
+      document.getElementById('mic-icon').src = 'static/icons/mic_level3.png';
+      initRecognition();
+      recognition.start();
+    }
+
+    function stopContinuousMode() {
+      continuousMode = false;
+      if (recognition) recognition.stop();
+      document.getElementById('mic-icon').src = 'static/icons/mic_level1.png';
+    }
+
+    // Distinguish single vs double click on mic
+    document.addEventListener('DOMContentLoaded', function() {
+      document.getElementById('mic-button').addEventListener('click', function() {
+        clickCount++;
+        if (clickCount === 1) {
+          clickTimer = setTimeout(() => {
+            // single click if not in continuous mode
+            if (!continuousMode) handleSingleClick();
+            clickCount = 0;
+          }, clickDelay);
+        } else if (clickCount === 2) {
+          clearTimeout(clickTimer);
+          if (!continuousMode) handleDoubleClick();
+          else stopContinuousMode();
+          clickCount = 0;
+        }
+      });
+    });
+
+    // Append user message (right side)
+    function appendUserMessage(text) {
+      const chatBox = $('#chat-box');
+      const userMsgHtml = `
+        <div class="message user-message">
+          <div class="message-content">
+            <img class="avatar" src="static/icons/user.png" alt="User"/>
+            <div class="message-bubble">${text}</div>
+          </div>
+        </div>`;
+      chatBox.append(userMsgHtml);
+      chatBox.scrollTop(chatBox[0].scrollHeight);
+    }
+
+    function appendBotMessage(text) {
+      const chatBox = $('#chat-box');
+      const botMsgHtml = `
+        <div class="message bot-message">
+          <div class="message-content">
+            <img class="avatar" src="static/icons/zara.png" alt="Zara"/>
+            <div class="message-bubble">${text}</div>
+          </div>
+          <!-- Feedback trigger and container -->
+          <div class="feedback-section">
+            <span class="feedback-trigger" onclick="toggleFeedback(this)">rate</span>
+            <div class="feedback-slider-container">
+              <input type="range" min="1" max="5" step="1" class="feedback-slider" onchange="sendFeedback(this, '<?= encodeURIComponent(botMessage) ?>')">
+            </div>
+          </div>
+        </div>`;
+      chatBox.append(botMsgHtml);
+      chatBox.scrollTop(chatBox[0].scrollHeight);
+    }
+
+
+    // Toggle the visibility of the feedback slider container
+    function toggleFeedback(triggerElem) {
+      // Look for the sibling container:
+      const sliderContainer = $(triggerElem).siblings('.feedback-slider-container');
+      sliderContainer.slideToggle(); // jQuery slide effect (you can also use toggle())
+    }
+
+    function sendFeedback(sliderElem, botMessageEncoded) {
+      const rating = sliderElem.value; // Alternatively, you can convert it using Number(rating)
+      const botMessage = decodeURIComponent(botMessageEncoded);
+      console.log("Feedback value:", rating, "for message:", botMessage);
+      // Hide the slider after feedback is recorded.
+      $(sliderElem).parent().slideUp();
+      // Send feedback via AJAX to the server
+      $.post('/feedback', { message: botMessage, rating: rating }, function(data) {
+        console.log("Feedback sent:", data);
+      });
+    }
+
+
+
+
+    // ========== Chat History & Load More ==========
+
+    function loadInitialHistory() {
+      $.get('/get_history', function(data) {
+        if (data.messages) {
+          for (let i = 0; i < data.messages.length; i++) {
+            const msg = data.messages[i];
+            if (msg.role === 'user') {
+              appendUserMessage(msg.text);
+            } else {
+              appendBotMessage(msg.text);
+            }
+          }
+          currentOffset = data.offset;
+        }
+        // scroll to bottom
+        $('#chat-box').scrollTop($('#chat-box')[0].scrollHeight);
+      });
+    }
+
+    function loadMoreHistory() {
+      if (currentOffset === 0) return; // no more history
+      $.get('/load_more', { offset: currentOffset }, function(data) {
+        if (data.messages && data.messages.length > 0) {
+          const chatBox = $('#chat-box');
+          const oldHeight = chatBox[0].scrollHeight;
+          const currentScroll = chatBox.scrollTop();
+          let content = '';
+          for (let i = 0; i < data.messages.length; i++) {
+            const msg = data.messages[i];
+            if (msg.role === 'user') {
+              content += `
+                <div class="message user-message">
+                  <div class="message-content">
+                    <img class="avatar" src="static/icons/user_icon.png" alt="User"/>
+                    <div class="message-bubble">${msg.text}</div>
+                  </div>
+                </div>`;
+            } else {
+              content += `
+                <div class="message bot-message">
+                  <div class="message-content">
+                    <img class="avatar" src="static/icons/bot_avatar.png" alt="Zara"/>
+                    <div class="message-bubble">${msg.text}</div>
+                  </div>
+                </div>`;
+            }
+          }
+          // prepend older messages
+          chatBox.prepend(content);
+          currentOffset = data.offset;
+          const newHeight = chatBox[0].scrollHeight;
+          chatBox.scrollTop(currentScroll + (newHeight - oldHeight));
+        }
+      });
+    }
+
+    // ========== On Page Ready ==========
+    $(document).ready(function(){
+      loadInitialHistory();
+      $('#chat-box').on('scroll', function(){
+        if ($(this).scrollTop() <= 10) {
+          loadMoreHistory();
+        }
+      });
+
+      // Normal text sending
+      $('#chat-form').on('submit', function(e){
+        e.preventDefault();
+        const message = $('#message').val();
+        if (message.trim() === '') return;
+        appendUserMessage(message);
+        $('#message').val('');
+        $.post('/send', { message: message }, function(data) {
+          if (data.response) {
+            appendBotMessage(data.response);
+          }
+        });
+      });
+    });
+  </script>
+</body>
+</html>
