@@ -1,4 +1,8 @@
-flask
-flask-cors
+Flask
+google-generativeai
+SpeechRecognition
+pandas
+nltk
 gunicorn
 web: gunicorn app:app
+flask-cors

@@ -13,6 +13,8 @@ import math
 
 # ---------------------- Your Existing Chatbot Code ---------------------- #
 
+nltk.download('vader_lexicon', quiet=True)
+
 sia = SentimentIntensityAnalyzer()
 
 USER_DATA_DIR = "user_data"
