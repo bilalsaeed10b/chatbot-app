@@ -4,5 +4,4 @@ SpeechRecognition
 pandas
 nltk
 gunicorn
-web: gunicorn app:app
 flask-cors
