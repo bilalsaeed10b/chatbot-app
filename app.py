@@ -5,6 +5,7 @@ import google.generativeai as genai
 import speech_recognition as sr
 import pandas as pd
 from nltk.sentiment import SentimentIntensityAnalyzer
+import nltk
 from collections import defaultdict
 import calendar
 from datetime import datetime
