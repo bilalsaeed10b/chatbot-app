@@ -135,7 +135,7 @@ generation_config = {
     "response_mime_type": "text/plain",
 }
 
-genai.configure(api_key="API_KEY_FROM_WEB")
+genai.configure(api_key=API_KEY_FROM_WEB)
 
 model = genai.GenerativeModel(
     model_name="gemini-2.0-flash-lite",
