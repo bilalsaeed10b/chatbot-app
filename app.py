@@ -11,12 +11,16 @@ import calendar
 from datetime import datetime
 import math
 
+print("✅ nltk imported successfully")
 
 # ---------------------- Your Existing Chatbot Code ---------------------- #
 
 nltk.download('vader_lexicon', quiet=True)
+print("✅ nltk downloaded successfully")
 
 sia = SentimentIntensityAnalyzer()
+
+print("✅ nltk analyzed successfully")
 
 USER_DATA_DIR = "user_data"
 GLOBAL_FEEDBACK_FILE = "global_feedback.csv"
