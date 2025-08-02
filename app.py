@@ -13,6 +13,8 @@ import math
 
 print("✅ nltk imported successfully")
 
+
+
 # ---------------------- Your Existing Chatbot Code ---------------------- #
 
 nltk.download('vader_lexicon', quiet=True)
@@ -21,6 +23,9 @@ print("✅ nltk downloaded successfully")
 sia = SentimentIntensityAnalyzer()
 
 print("✅ nltk analyzed successfully")
+
+API_KEY = os.environ.get('API_KEY_FROM_WEB')
+print("api key imported")
 
 USER_DATA_DIR = "user_data"
 GLOBAL_FEEDBACK_FILE = "global_feedback.csv"
