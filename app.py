@@ -1,4 +1,3 @@
-
 import os
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 import google.generativeai as genai
@@ -12,33 +11,29 @@ from datetime import datetime
 import math
 
 print("✅ nltk imported successfully")
-
-
+print("✅ Starting app.py")
+print("Imported modules: Flask, genai, sr, pandas, nltk, calendar, datetime, math")
 
 # ---------------------- Your Existing Chatbot Code ---------------------- #
 
 nltk.download('vader_lexicon', quiet=True)
-print("✅ nltk downloaded successfully")
+print("✅ nltk vader_lexicon downloaded")
 
 sia = SentimentIntensityAnalyzer()
-
-print("✅ nltk analyzed successfully")
+print("✅ SentimentIntensityAnalyzer initialized")
 
 API_KEY = os.environ.get('API_KEY_FROM_WEB')
-print("api key imported")
+print("API_KEY imported:", API_KEY)
 
 USER_DATA_DIR = "user_data"
 GLOBAL_FEEDBACK_FILE = "global_feedback.csv"
-
 DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-
-
-
-
+print("Days list:", DAYS)
 
 def create_user_folder(user_id):
     user_folder = os.path.join(USER_DATA_DIR, f"user_{user_id}")
     os.makedirs(user_folder, exist_ok=True)
+    print(f"[create_user_folder] Created/accessed folder: {user_folder}")
     return user_folder
 
 def save_user_data(user_id, data_type, data):
@@ -46,9 +41,11 @@ def save_user_data(user_id, data_type, data):
     file_path = os.path.join(user_folder, f"{data_type}.txt")
     with open(file_path, "a", encoding="utf-8") as file:
         file.write(data + "\n")
+    print(f"[save_user_data] Saved {data_type} for {user_id} at {file_path}")
 
 def get_sentiment(text):
     sentiment = sia.polarity_scores(text)
+    print(f"[get_sentiment] Text: {text} | Sentiment: {sentiment}")
     return {
         'score': round((sentiment['compound'] + 1) * 5, 2),
         'label': 'positive' if sentiment['compound'] >= 0.05 else
@@ -64,7 +61,7 @@ def initialize_global_feedback():
             'bot_response',
             'user_feedback'
         ]).to_csv(GLOBAL_FEEDBACK_FILE, index=False)
-
+        print("[initialize_global_feedback] Created global feedback file.")
 
 def save_global_feedback(user_id, user_input, response, sentiment, feedback):
     new_entry = {
@@ -74,12 +71,12 @@ def save_global_feedback(user_id, user_input, response, sentiment, feedback):
         'user_feedback': feedback
     }
     pd.DataFrame([new_entry]).to_csv(GLOBAL_FEEDBACK_FILE, mode='a', header=False, index=False)
-
+    print(f"[save_global_feedback] Saved feedback for {user_id}: {new_entry}")
 
 def save_interaction(user_id, user_input, response, sentiment, feedback=None):
+    print(f"[save_interaction] user_id: {user_id}, user_input: {user_input}, response: {response}, sentiment: {sentiment}, feedback: {feedback}")
     user_folder = create_user_folder(user_id)
     csv_path = os.path.join(user_folder, "chat_history.csv")
-    # New columns: timestamp, user_input, bot_response, sentiment
     dtypes = {
         'timestamp': 'object',
         'user_input': 'object',
@@ -88,22 +85,23 @@ def save_interaction(user_id, user_input, response, sentiment, feedback=None):
     }
     if os.path.exists(csv_path):
         conversation_history = pd.read_csv(csv_path).astype(dtypes)
+        print(f"[save_interaction] Loaded existing chat history for {user_id}")
     else:
         conversation_history = pd.DataFrame(columns=dtypes.keys()).astype(dtypes)
+        print(f"[save_interaction] Initialized new chat history for {user_id}")
     new_entry = {
         'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         'user_input': str(user_input),
         'bot_response': str(response),
-        'sentiment': sentiment['score']  # using the sentiment score from get_sentiment()
+        'sentiment': sentiment['score']
     }
     new_entry_df = pd.DataFrame([new_entry]).astype(dtypes)
     conversation_history = pd.concat([conversation_history, new_entry_df], ignore_index=True)
     conversation_history.to_csv(csv_path, index=False)
-    # Save global feedback only if feedback is provided
+    print(f"[save_interaction] Saved interaction for {user_id}: {new_entry}")
     if feedback is not None:
         save_global_feedback(user_id, user_input, response, sentiment, feedback)
-
-
+        print(f"[save_interaction] Feedback also saved for {user_id}")
 
 def recognize_speech_from_audio(audio_file):
     recognizer = sr.Recognizer()
@@ -209,12 +207,15 @@ user_sessions = {}
 
 @app.route('/', methods=['GET', 'POST'])
 def login():
+    print("[login] Route accessed")
     if request.method == 'POST':
         username = request.form.get('username').strip()
+        print(f"[login] POST username: {username}")
         if username:
             session['username'] = username
             if username not in user_sessions:
                 user_sessions[username] = start_chat_session(username)
+                print(f"[login] New session started for {username}")
             return redirect(url_for('chat'))
     return render_template('login.html')
 
@@ -227,45 +228,38 @@ def chat():
 
 @app.route('/send', methods=['POST'])
 def send():
+    print("[send] Route accessed")
     if 'username' not in session:
+        print("[send] Not logged in")
         return jsonify({'error': 'Not logged in'})
     username = session['username']
     user_input = request.form.get('message')
+    print(f"[send] Received message from {username}: {user_input}")
     if not user_input:
+        print("[send] Empty message")
         return jsonify({'error': 'Empty message'})
-
-    # Crisis detection remains the same
     if any(kw in user_input.lower() for kw in ["kill", "suicide", "die"]):
+        print(f"[send] Crisis keywords detected in message: {user_input}")
         return jsonify({'response': crisis_response()})
-
-    # Get sentiment analysis for the user input
     sentiment = get_sentiment(user_input)
-    update_weekly_sentiment(username, sentiment['score'])  # saves weekly sentiment for report
-
-    # Adjust chat style based on sentiment
+    print(f"[send] Sentiment for message: {sentiment}")
+    update_weekly_sentiment(username, sentiment['score'])
     extra_context = ""
     if sentiment['label'] == 'negative':
         extra_context = "User appears to be feeling negative. Please respond with extra empathy and gentle reassurance."
     elif sentiment['label'] == 'positive':
         extra_context = "User appears to be feeling positive. Please respond in an upbeat, encouraging manner."
-    # For 'neutral', no extra context is added
-
-    # Construct message for the model including sentiment context
     message_to_send = f"[User sentiment: {sentiment['label'].upper()}]\n{user_input}\n{extra_context}"
-
     try:
         chat_session = user_sessions.get(username)
         response = chat_session.send_message(message_to_send)
         response_text = response.text.replace("END_RESPONSE", "").strip()
-
-        # Update the chat session in case it has changed internally
         user_sessions[username] = chat_session
-
-        # Save the interaction along with sentiment score
         save_interaction(username, user_input, response_text, sentiment)
+        print(f"[send] Bot response: {response_text}")
         return jsonify({'response': response_text})
     except Exception as e:
-        # If there's an error, reinitialize the chat session and try again
+        print(f"[send] Error: {e}")
         user_sessions[username] = start_chat_session(username)
         return jsonify({'response': "I'm having trouble responding. Let's try that again."})
 
